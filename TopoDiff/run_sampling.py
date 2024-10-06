@@ -247,7 +247,7 @@ if __name__ == '__main__':
     }
 
     ############################# env #############################
-    print('gpu_list', gpu_list)
+
     os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(map(str, gpu_list))
     os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"  # set to DETAIL for runtime logging.
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:256"
@@ -262,7 +262,6 @@ if __name__ == '__main__':
 
     ############################# ddp #############################
 
-    print('setup, rank', local_rank)
     if world_size == 1:
         logger.info('World size is 1, disable ddp')
         pass

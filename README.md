@@ -62,6 +62,9 @@ python: run_sampling.py [-h] [-o OUTDIR] [-v VERSION] [-m MODE] [-s START] [-e E
 # e.g.
 # sample 10 backbones of length 100, 110, 120
 # python run_sampling.py -o sampling_result -s 100 -e 120 -n 10 -i 10
+
+# same, but sampling in all_round preference mode
+# python run_sampling.py -o sampling_result -s 100 -e 120 -n 10 -i 10 -m all_round
 ```
 
 Arguments:
@@ -129,7 +132,7 @@ We also provide a series of notebooks to help you walk through the functionaliti
 
 ## Reference
 
-[TopoDiff: Improving Diffusion-Based Protein Backbone Generation with Global-Geometry-aware Latent Encoding](https://www.biorxiv.org/content/10.1101/2023.12.13.571602)
+[Improving Diffusion-Based Protein Backbone Generation with Global-Geometry-aware Latent Encoding](https://www.biorxiv.org/content/10.1101/2024.10.05.616664)
 
 ## Acknowledgements
 

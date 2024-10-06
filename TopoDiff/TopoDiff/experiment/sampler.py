@@ -429,7 +429,7 @@ class Sampler:
         else:
             # when preset mode is specified, other cutoff settings can be overriden
             cur_mode_setting = self.mode_preset_settings[self.sample_config['mode_preset']]
-            print(cur_mode_setting)
+            # print(cur_mode_setting)
 
             for attrib in ['sc', 'novelty', 'alpha', 'beta', 'coil']:
                 self.sample_config['pred_%s' % attrib] = False
