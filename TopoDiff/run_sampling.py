@@ -122,6 +122,8 @@ if __name__ == '__main__':
         if ',' in args.max_sc:
             max_sc = [float(x) for x in args.max_sc.split(',')]
             assert len(max_sc) == len(sample_goal_list), 'The number of specified max_sc must be a single value or the same as the number of lengths'
+        else:
+            max_sc = [float(args.max_sc)] * len(sample_goal_list)
     else:
         min_sc = None
         max_sc = None
@@ -135,6 +137,8 @@ if __name__ == '__main__':
         if ',' in args.max_novelty:
             max_novelty = [float(x) for x in args.max_novelty.split(',')]
             assert len(max_novelty) == len(sample_goal_list), 'The number of specified max_novelty must be a single value or the same as the number of lengths'
+        else:
+            max_novelty = [float(args.max_novelty)] * len(sample_goal_list)
     else:
         min_novelty = None
         max_novelty = None
@@ -148,6 +152,8 @@ if __name__ == '__main__':
         if ',' in args.max_alpha:
             max_alpha = [float(x) for x in args.max_alpha.split(',')]
             assert len(max_alpha) == len(sample_goal_list), 'The number of specified max_alpha must be a single value or the same as the number of lengths'
+        else:
+            max_alpha = [float(args.max_alpha)] * len(sample_goal_list)
     else:
         min_alpha = None
         max_alpha = None
@@ -161,6 +167,8 @@ if __name__ == '__main__':
         if ',' in args.max_beta:
             max_beta = [float(x) for x in args.max_beta.split(',')]
             assert len(max_beta) == len(sample_goal_list), 'The number of specified max_beta must be a single value or the same as the number of lengths'
+        else:
+            max_beta = [float(args.max_beta)] * len(sample_goal_list)
     else:
         min_beta = None
         max_beta = None
@@ -174,6 +182,8 @@ if __name__ == '__main__':
         if ',' in args.max_coil:
             max_coil = [float(x) for x in args.max_coil.split(',')]
             assert len(max_coil) == len(sample_goal_list), 'The number of specified max_coil must be a single value or the same as the number of lengths'
+        else:
+            max_coil = [float(args.max_coil)] * len(sample_goal_list)
     else:
         min_coil = None
         max_coil = None
