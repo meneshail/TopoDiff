@@ -6,7 +6,6 @@ import numpy as np
 
 logger = logging.getLogger("TopoDiff.config.config")
 
-#. define the value of Inf used in the model
 def set_inf(c, inf):
     for k, v in c.items():
         if isinstance(v, mlc.ConfigDict):
@@ -20,7 +19,6 @@ def model_config(
     extra=None
 ):
     c = copy.deepcopy(config)
-
 
     if name == 'v1_1_2':
         """    
@@ -156,6 +154,114 @@ def model_config(
         c.Model.Diffuser.SO3.reverse_parm.score_and_noise.sampling_noise_scale = 0.
         c.Model.Diffuser.SO3.reverse_parm.score_and_noise.sampling_score_scale = 3.
 
+    elif name == 'train_stage_1':
+        """    
+        Training settings for stage 1.
+        """
+        # default for now
+        # c.Model.Global.Embedder = 'Embedder_v2'
+        # c.Model.Global.Backbone = 'Backbone_v2'
+
+        # default for now
+        # c.Loss.translation.weight = 0.25
+        # c.Loss.rotation.weight = 0.5
+        # c.Loss.distogram.weight = 0.5
+        # c.Loss.fape.main_frame.weight = 0.
+        # c.Loss.fape.backbone.weight = 1.
+
+        c.Model.Diffuser.SO3.reverse_strategy = 'hat_and_noise'
+        c.Model.Diffuser.SO3.sampling_reverse_strategy  = 'hat_and_noise'
+        c.Model.Diffuser.SO3.hat_and_noise.noise_scale = (0, 5)
+
+    elif name == 'train_stage_2':
+        # default for now
+        # c.Model.Global.Embedder = 'Embedder_v2'
+        # c.Model.Global.Backbone = 'Backbone_v2'
+
+        # default for now
+        # c.Loss.translation.weight = 0.25
+        # c.Loss.rotation.weight = 0.5
+        # c.Loss.distogram.weight = 0.5
+        # c.Loss.fape.main_frame.weight = 0.
+        # c.Loss.fape.backbone.weight = 1.
+
+        # default for now 
+        c.Model.Diffuser.SO3.reverse_strategy = 'score_and_noise'
+        c.Model.Diffuser.SO3.sampling_reverse_strategy = 'score_and_noise'
+        c.Model.Diffuser.SO3.reverse_parm.score_and_noise.sampling_noise_scale = 0.
+        c.Model.Diffuser.SO3.reverse_parm.score_and_noise.sampling_score_scale = 2.
+
+    elif name == 'train_stage_3':
+        # default for now
+        # c.Model.Global.Embedder = 'Embedder_v2'
+        # c.Model.Global.Backbone = 'Backbone_v2'
+
+        # default for now
+        # c.Loss.translation.weight = 0.25
+        # c.Loss.rotation.weight = 0.5
+        # c.Loss.distogram.weight = 0.5
+        # c.Loss.fape.main_frame.weight = 0.
+        # c.Loss.fape.backbone.weight = 1.
+
+        # KL regularization schedule
+        c.Loss.kl_regularization.weight = 0.
+        c.Loss.kl_regularization.force_compute = True
+        c.Loss.kl_regularization.schedule = mlc.ConfigDict(
+            {
+                'mode' : 'cold start',
+                'cold_start_epoch' : 50,
+                'warm_up_epoch' : 550,
+                'weight_min' : 0,
+                'weight_max' : 1e-3,
+            }
+        )
+
+        # stop fixing too many residues
+        c.Data.common.partial_fixed.fixed_prob = 0.3
+
+        # NOTE topological conditioning (continuous)
+        # NOTE data
+        # topo_conditioning
+        c.Data.common.topo_conditioning.enabled = True
+        c.Data.common.topo_conditioning.type = 'continuous'
+
+        # trim_end oper
+        c.Data.common.trim_end = True
+
+        # encoder_feat
+        c.Data.common.encoder_feat.enabled = True
+        c.Data.common.encoder_feat.add_noise.enabled = True
+
+        # padding
+        c.Data.common.feat.encoder_feats = [NUM_RES, None]
+        c.Data.common.feat.encoder_coords = [NUM_RES, None]
+        c.Data.common.feat.encoder_mask = [NUM_RES]
+        c.Data.common.feat.encoder_adj_mat = [NUM_RES, NUM_RES]
+
+        # type
+        c.Data.common.feat_type.encoder_feats = 'torch.float32'
+        c.Data.common.feat_type.encoder_coords = 'torch.float32'
+        c.Data.common.feat_type.encoder_mask = 'torch.bool'
+        c.Data.common.feat_type.encoder_adj_mat = 'torch.bool'
+
+        # NOTE model
+        c.Model.Global.Encoder = 'Encoder_v1'
+
+        # Embedder_v2
+        c.Model.Embedder_v2.topo_embedder.enabled = True
+        c.Model.Embedder_v2.topo_embedder.type = 'continuous_v2'
+
+        # NOTE new for latent mask
+        c.Data.common.topo_conditioning.continuous.mask_prob = 0.25
+        c.Model.Embedder_v2.topo_embedder.embed_mask = True
+        c.Data.common.feat.latent_mask = []
+        c.Data.common.feat_type.latent_mask = 'torch.float32'
+
+        c.Model.Diffuser.SO3.sampling_reverse_strategy = 'score_and_noise'
+        c.Model.Diffuser.SO3.reverse_parm.score_and_noise.sampling_noise_scale = 0.
+        c.Model.Diffuser.SO3.reverse_parm.score_and_noise.sampling_score_scale = 2.
+
+
     else:
         raise ValueError(f'Unknown model name {name}')
 
@@ -163,7 +269,9 @@ def model_config(
         if type(extra) == str:
             extra = [extra]
 
-        # print(f'extra: {extra}')
+        if 'encoder_layer_ipa' in extra:
+            c.Data.common.encoder_feat.enabled = True
+            c.Data.common.encoder_feat.layer_type = 'ipa'
 
     if low_prec:
         logger.info('Using low precision training, setting eps to 1e-4')
@@ -177,6 +285,8 @@ c_z = mlc.FieldReference(128, field_type=int)
 c_m = mlc.FieldReference(256, field_type=int)
 c_s = mlc.FieldReference(256, field_type=int)
 eps = mlc.FieldReference(1e-8, field_type=float)
+
+encoder_layer_type = mlc.FieldReference('egnn', field_type=str)
 
 NUM_RES = "num residues placeholder"
 NUM_MSA_SEQ = "msa placeholder"
@@ -258,13 +368,13 @@ config = mlc.ConfigDict(
                     "contact_type": "CA",
                 },
                 "partial_fixed":{
-                    'enabled': False,
+                    'enabled': True,
                     "fixed_prob": 0.6,
                     "fixed_ratio": (0.2, 0.8),
                     "continuous_prob": 0.5,
                 },
                 "masked_sequence": {
-                    "enabled": False,
+                    "enabled": True,
                 },
                 "coordinate_shift": {
                     'centered': True,
@@ -276,7 +386,7 @@ config = mlc.ConfigDict(
                     'T': T,
                 },
                 "max_self_condition_step": 3,
-                'structure_preprocessed': False,
+                'structure_preprocessed': True,
                 'trim_end': False, 
                 'topo_conditioning': {
                     'enabled': False,
@@ -296,9 +406,11 @@ config = mlc.ConfigDict(
                         'type': 'gaussian',
                         'std': 1,
                     },
+                    'layer_type': encoder_layer_type, #  'egnn', 'ipa'
+                    'frame_type': '4x4',  # ['4x4', '7']
                 },
                 "pad_in_collator": {
-                    "enabled" : False,
+                    "enabled" : True,
                 },
                 "unsupervised_features": [
                     "aatype",
@@ -310,6 +422,10 @@ config = mlc.ConfigDict(
                     "deletion_matrix",
                     "no_recycling_iters",
                 ],
+            },
+            "train": {
+                    "crop": True,
+                    "crop_size": 256,
             },
         },
         'Global': {
@@ -337,8 +453,23 @@ config = mlc.ConfigDict(
 
                 'n_layers': 6,
                 'm_dim': 16,
+
+                'layer_type': encoder_layer_type, # "egnn", "ipa"
+
                 'hidden_egnn_dim': 64,
                 'hidden_edge_dim': 256,
+
+                'ipa':{
+                    'trans_scale_factor': 10,
+                    'c_hidden': 32,
+                    'c_s': 128,
+                    'c_z': 64,
+                    'no_heads': 4,
+                    'no_qk_points': 4,
+                    'no_v_points': 6,
+                    'inf': 1e5,
+                    'eps': eps,
+                },
 
                 'embedding_size': 64,
                 'latent_dim': 32,
@@ -477,22 +608,22 @@ config = mlc.ConfigDict(
                 "max_bin": 21.6875,
                 "no_bins": 64,
                 "eps": eps,  # 1e-6,
-                "weight": 1.0,
+                "weight": 0.5,
                 "force_compute": False,
             },
             "fape": {
                 "clamp_distance": 10.0,
                 "loss_unit_distance": 10.0,
                 "clamp_fape_ratio": 0.9,
-                "weight": 0.,
+                # "weight": 0.,
                 "eps": 1e-4,
                 "main_frame":{
-                    "weight": 0.5,
+                    "weight": 0.,
                     "force_compute": False,
                     "compute_for_all": True,
                 },
                 "backbone":{
-                    "weight": 0.5,
+                    "weight": 1.,
                     "force_compute": False,
                 }
             },

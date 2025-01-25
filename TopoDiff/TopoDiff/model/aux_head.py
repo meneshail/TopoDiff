@@ -18,11 +18,9 @@ class AuxiliaryHeads(nn.Module):
 
     def forward(self, outputs, feat):
         aux_out = {}
-
-        if not self.train_latent_head:
-
-            distogram_logits = self.distogram(outputs["pair_emb"])
-            aux_out["distogram_logits"] = distogram_logits
+        
+        distogram_logits = self.distogram(outputs["pair_emb"])
+        aux_out["distogram_logits"] = distogram_logits
         
         return aux_out
     

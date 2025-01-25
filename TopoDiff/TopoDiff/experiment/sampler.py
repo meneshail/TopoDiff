@@ -161,14 +161,14 @@ class Sampler:
             assert self.rank == int(os.environ['LOCAL_RANK']), 'rank %d != os.environ[LOCAL_RANK] %d' % (self.rank, int(os.environ['LOCAL_RANK']))
             assert self.world_size == int(os.environ['WORLD_SIZE']), 'world_size %d != os.environ[WORLD_SIZE] %d' % (self.world_size, int(os.environ['WORLD_SIZE']))
 
+        if sample_config is None:
+            logger.debug('Sample config is not provided, will wait for user input')
+        self.sample_config = sample_config
+
         # init settings for specified version
         logger.debug('init settings for version %s' % model_version)
         self.model_version = model_version
         self._init_version()
-
-        if sample_config is None:
-            logger.debug('Sample config is not provided, will wait for user input')
-        self.sample_config = sample_config
 
         # added for score sampling parameter
         # print(self.setting_diffusion)
@@ -239,6 +239,25 @@ class Sampler:
             self.setting_beta_head = {'model_preset': 'candidate_1'}
             self.setting_coil_head = {'model_preset': 'candidate_1'}
 
+        elif self.model_version == 'custom':
+            ckpt_path = self.sample_config['ckpt']
+            self.setting_diffusion = {
+                'ckpt_path': ckpt_path,
+                'model_preset': 'v1_1_2',
+                'extra': [],
+                'sampling_parm': {
+                    'rotation_reverse_score_scale_override': 2,
+                    'rotation_reverse_noise_scale_override': 0,
+                },
+            }
+            self.setting_latent = {
+                'model_preset': 'model_1',
+            }
+            self.setting_sc_head = None
+            self.setting_novelty_head = None
+            self.setting_alpha_head = None
+            self.setting_beta_head = None
+            self.setting_coil_head = None
         else:
             raise NotImplementedError('model_version %s is not implemented' % self.model_version)
 
@@ -429,7 +448,6 @@ class Sampler:
         else:
             # when preset mode is specified, other cutoff settings can be overriden
             cur_mode_setting = self.mode_preset_settings[self.sample_config['mode_preset']]
-            # print(cur_mode_setting)
 
             for attrib in ['sc', 'novelty', 'alpha', 'beta', 'coil']:
                 self.sample_config['pred_%s' % attrib] = False

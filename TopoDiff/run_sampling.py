@@ -32,6 +32,7 @@ def parse_args():
 
     # model version
     parser.add_argument('-v', '--version', type=str, default='v1_1_2', help='The version of the model, default: v1_1_2 (recommended)')
+    parser.add_argument('--ckpt', type=str, default=None, help='The checkpoint path of customised model, default: None')
 
     # sampling mode
     parser.add_argument('-m', '--mode', type=str, default=None, help='The mode of sampling (model variants with different sampling preference), default: None. Available options [base, designability, novelty, all_round]. Note that set this to a valid option will orverride the pred_* options.')
@@ -92,8 +93,10 @@ if __name__ == '__main__':
     if args.outdir is None:
         raise ValueError('Output directory is not specified')
     
-    if args.version not in ['v1_1_2', 'v1_1_1']:
+    if args.version not in ['v1_1_2', 'v1_1_1', 'custom']:
         raise ValueError('The model version is not supported')
+        if args.version == 'custom' and args.ckpt is None:
+            raise ValueError('Please specify the checkpoint path for custom model')
     
     if args.start < 50:
         raise ValueError('The start length must be larger than 50')
@@ -254,6 +257,9 @@ if __name__ == '__main__':
 
         'latent_batch_size': min(10000, 50 * sum([tup[1] for tup in sample_goal_list])),
         'structure_batch_size': 1, # NOTE currently fixed
+
+        'version': args.version,
+        'ckpt': args.ckpt,
     }
 
     ############################# env #############################

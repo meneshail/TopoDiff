@@ -90,7 +90,6 @@ class Diffusion(nn.Module):
                         The mask of the encoder input
                     encoder_adj_mat: [*, N_res, N_res]
                         The adjacency matrix of the encoder input
-                    
         """
 
         if self.encoder is not None:
@@ -180,7 +179,7 @@ class Diffusion(nn.Module):
             result['seq_emb'] = backbone_output['seq_emb']
             result['pair_emb'] = backbone_output['pair_emb']
         else:
-            result.update(emb_output)  # NOTE 2023.08.21: add topology embedding
+            result.update(emb_output)
 
 
             result.update(backbone_output)
@@ -279,7 +278,7 @@ class Diffusion(nn.Module):
             feat.update(self._init_feat(num_samples = num_samples, num_res = num_res, timestep = timestep))
             #. initialize latent features
             feat['latent_z'] = latent
-            if not force_mask_latent:  # NOTE 24.02.27: added for latent masked sampling
+            if not force_mask_latent:
                 feat['latent_mask'] = torch.ones(num_samples, dtype = torch.float32)
             else:
                 feat['latent_mask'] = torch.zeros(num_samples, dtype = torch.float32)
@@ -519,3 +518,142 @@ class Diffusion(nn.Module):
         res_dict['latent_z'] = latent_z
 
         return res_dict
+
+    def _init_latent(self, num_samples = 1):
+        feat = {}
+        if self.latent_dim is not None:
+            feat['latent_z'] = torch.zeros(num_samples, self.latent_dim, dtype = torch.float32)
+        feat['latent_mask'] = torch.zeros(num_samples, dtype = torch.float32)
+        return feat
+
+    def sample_unconditional(self, feat = None, init_feat = True, return_traj = False, num_res = 150, timestep = 200, 
+                             return_frame = False, return_position = False, reconstruct_position = False, 
+                             init_latent = False, 
+                             translation_reverse_strategy_override = None, 
+                             rotation_reverse_strategy_override = None,
+                             rotation_reverse_noise_scale_override = None,
+                             rotation_reverse_score_scale_override = None,
+                             **kwargs):
+        """Unconditional generation of samples.
+
+        feat(Minimal):
+            - timestep [*]
+            - seq_type [*, N_res]
+            - seq_idx [*, N_res]
+            - seq_mask [*, N_res]
+            - frame_mask [*, N_res]
+            - seq_feat [*, N_res, 22]
+
+            (maybe necessary)
+            - latent_z [*, latent_dim]
+            - latent_mask [*,]
+        """
+        if 'num_samples' in kwargs:
+            logger.warning('`num_samples` is deprecated. Will be set to 1 in all cases.')
+        num_samples = 1
+        device = self.device
+
+        if return_traj:
+            if not return_frame and not reconstruct_position:
+                raise ValueError('return_traj is True but return_frame and reconstruct_position are both False.')
+            if return_frame:
+                frame_noised_record = []
+                frame_hat_record = []
+            if return_position:
+                if reconstruct_position:
+                    self._prepare_helper()
+                coord_noised_record = []
+                coord_hat_record = []
+
+        with torch.no_grad():
+            if feat is None or init_feat:
+                if feat is None:
+                    feat = {'batch_idx': torch.zeros(num_samples, dtype = torch.long)}
+                #. initialize features
+                feat.update(self._init_feat(num_samples = num_samples, num_res = num_res, timestep = timestep))
+                #. initialize latent features
+                if init_latent:
+                    feat.update(self._init_latent(num_samples = num_samples))
+                feat = tensor_tree_map(lambda x: x.to(device), feat)
+                
+            # forward sample
+            frame_noised = self.diffuser.forward_sample_marginal(feat['frame_gt'], feat['timestep'], feat['frame_mask'], intype = 'tensor_4x4', outtype = 'tensor_7')
+
+            if return_traj:
+                if return_frame:
+                    frame_noised_record.append(frame_noised.detach().cpu())
+                if return_position:
+                    if reconstruct_position:
+                        coord_noised = self.helper.reconstruct_backbone_position_without_torsion_wrap(
+                            frame_pred = frame_noised, seq_type = feat['seq_type'], intype='tensor_7'
+                        )
+                    else:
+                        raise NotImplementedError('Not implemented yet.')
+                    coord_noised_record.append(coord_noised.detach().cpu())
+
+            is_first_tag = True
+            prev = None
+
+            if 'sample_idx' in feat:
+                sample_idx = feat['sample_idx']
+            else:
+                sample_idx = torch.zeros(1, dtype = torch.long)
+
+            for i in range(timestep):
+                res_dict = self.sample_step(feat, frame_noised, prev, reverse_sample = True, inplace_safe = True, is_first = is_first_tag, intype = 'tensor_7', outtype = 'tensor_7',
+                                    translation_reverse_strategy_override = translation_reverse_strategy_override,
+                                    rotation_reverse_strategy_override = rotation_reverse_strategy_override,
+                                    rotation_reverse_noise_scale_override = rotation_reverse_noise_scale_override,
+                                    rotation_reverse_score_scale_override = rotation_reverse_score_scale_override,
+                                    )
+                seq_emb, pair_emb, frame_hat, frame_denoised = res_dict['seq_emb'], res_dict['pair_emb'], res_dict['frame_hat'], res_dict['frame_denoised']
+
+                frame_hat_trans = frame_hat[..., 4:]
+                prev = [seq_emb, pair_emb, frame_hat_trans]
+                frame_noised = frame_denoised
+                feat['timestep'] -= 1
+                is_first_tag = False
+
+                if return_traj:
+                    if return_frame:
+                        frame_hat_record.append(frame_hat.detach().cpu())
+                        frame_noised_record.append(frame_denoised.detach().cpu())
+                    if return_position:
+                        if reconstruct_position:
+                            coord_hat = self.helper.reconstruct_backbone_position_without_torsion_wrap(
+                                frame_pred = frame_hat, seq_type = feat['seq_type'], intype='tensor_7'
+                            )
+                            coord_denoised = self.helper.reconstruct_backbone_position_without_torsion_wrap(
+                                frame_pred = frame_denoised, seq_type = feat['seq_type'], intype='tensor_7'
+                            )
+                        coord_noised_record.append(coord_denoised.detach().cpu())
+                        coord_hat_record.append(coord_hat.detach().cpu())
+
+                del res_dict, seq_emb, pair_emb      # frame_hat, frame_denoised
+
+        result = {}
+        result['frame_denoised'] = frame_noised[0].cpu()
+        result['frame_hat'] = frame_hat[0].cpu()
+
+        #. concat along the first dimension and reverse the order
+        if return_traj:
+            if return_frame:
+                result['frame_noised_record'] = torch.cat(frame_noised_record[::-1], dim = 0)
+                result['frame_hat_record'] = torch.cat(frame_hat_record[::-1], dim = 0)
+            if return_position:
+                result['coord_noised_record'] = torch.cat(coord_noised_record[::-1], dim = 0)
+                result['coord_hat_record'] = torch.cat(coord_hat_record[::-1], dim = 0)
+            result['noised_timestep_record'] = torch.arange(timestep+1, dtype = torch.long, device = device)
+            result['hat_timestep_record'] = torch.arange(timestep, dtype = torch.long, device = device)
+
+        if reconstruct_position:
+            coord_denoised = self.helper.reconstruct_backbone_position_without_torsion_wrap(
+                frame_pred = frame_denoised, seq_type = feat['seq_type'], intype='tensor_7'
+            )
+            coord_hat = self.helper.reconstruct_backbone_position_without_torsion_wrap(
+                frame_pred = frame_hat, seq_type = feat['seq_type'], intype='tensor_7'
+            )
+            result['coord_denosied'] = coord_denoised[0].cpu()
+            result['coord_hat'] = coord_hat[0].cpu()
+
+        return result   
