@@ -484,7 +484,7 @@ class MyLatentTrainer():
         if self.rank == 0:
             logger.info('Packing checkpoint...')
             
-            save_path = os.path.join(self.args.outdir, 'ckpt', 'epoch_%d.pkl' % self.args.latent_epoch)
+            save_path = os.path.join(self.args.outdir, 'ckpt', 'epoch_%d.ckpt' % self.args.latent_epoch)
             structure_ckpt_path = os.path.join(self.args.outdir, 'save', 'ckpt', 'epoch_%d.pkl' % self.args.latent_epoch)
             embedding_path = os.path.join(self.args.outdir, 'save', 'embedding', 'epoch_%d.pkl' % self.args.latent_epoch)
             latent_ckpt_path = os.path.join(self.train_config.Base.ckpt_save_dir, 'epoch_%d.pkl' % self.current_epoch)

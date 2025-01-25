@@ -60,11 +60,11 @@ python: run_sampling.py [-h] [-o OUTDIR] [-v VERSION] [-m MODE] [-s START] [-e E
 
 
 # e.g.
-# sample 10 backbones of length 100, 110, 120
-# python run_sampling.py -o sampling_result -s 100 -e 120 -n 10 -i 10
-
-# same, but sampling in all_round preference mode
+# sample 10 backbones of length 100, 110, 120, sampling in all_round preference mode (recommended)
 # python run_sampling.py -o sampling_result -s 100 -e 120 -n 10 -i 10 -m all_round
+
+# same, but sampling in base preference mode
+# python run_sampling.py -o sampling_result -s 100 -e 120 -n 10 -i 10
 ```
 
 Arguments:
@@ -129,6 +129,27 @@ outdir
 ### Notebook
 
 We also provide a series of notebooks to help you walk through the functionalities of the model. They are located in the `notebook` directory.
+
+### Training
+
+```
+# inside repo
+# download also from https://zenodo.org/records/13879812
+mv path/to/download/train_data data/
+
+# training setting of all stages are available in TopoDiff.config, here we directly start from stage 3 (with encoder)
+mkdir experiments
+
+# structure diffusion, suppose we have 4 gpus to use
+CUDA_VISIBLE_DEVICES="0,1,2,3"  torchrun --nproc_per_node 4 --master_port <port> ./TopoDiff/run_training.py -o ./experiments --stage 3 --model structure --init_ckpt ./data/weights/v1_1/model.ckpt -gpu 0,1,2,3
+
+# latent diffusion
+python ./TopoDiff/run_training.py -o ./experiments --model latent --latent_epoch <epc> --gpu 0
+
+# this will pack all necessary model weights and config into a single file at ./experiments/ckpt/epoch_<epc>.ckpt, and you can use it for sampling with the following command
+python ./TopoDiff/run_sampling.py -s 125 -e 125 -n 25 -v custom --ckpt ./experiments/ckpt/epoch_<epc>.ckpt -o ./experiments/sample/
+```
+
 
 ## Reference
 
