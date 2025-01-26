@@ -17,7 +17,7 @@ import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
-
+ 
 #. model
 from TopoDiff.model.latent_diffusion import LatentDiffusion
 from TopoDiff.model.diffuser.latent_diffuser import LatentDiffuser

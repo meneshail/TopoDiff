@@ -132,7 +132,7 @@ We also provide a series of notebooks to help you walk through the functionaliti
 
 ### Training
 
-```
+```bash
 # inside repo
 # download also from https://zenodo.org/records/13879812
 mv path/to/download/train_data data/
@@ -148,6 +148,26 @@ python ./TopoDiff/run_training.py -o ./experiments --model latent --latent_epoch
 
 # this will pack all necessary model weights and config into a single file at ./experiments/ckpt/epoch_<epc>.ckpt, and you can use it for sampling with the following command
 python ./TopoDiff/run_sampling.py -s 125 -e 125 -n 25 -v custom --ckpt ./experiments/ckpt/epoch_<epc>.ckpt -o ./experiments/sample/
+```
+
+### Evaluation
+
+We currently provide the evaluation scripts for the diversity and the newly proposed coverage metrics. They are located in the `TopoDiff/evaluation` directory.
+
+We recommend first walk through the notebook `3_metrics.ipynb` to understand the usage of the evaluation script.
+
+To use the evaluation script, additional precomputed data are required to be downloaded from our [Zenodo repository](https://zenodo.org/record/13879812).
+
+```bash
+# inside repo
+# download also from https://zenodo.org/records/13879812
+mv path/to/download/evaluation/ data/
+
+# download the model and CATH embeddings following official instructions
+mkdir TopoDiff/progres/progres/trained_models/v_0_2_0/
+wget https://zenodo.org/records/7782089/files/trained_model.pt -O TopoDiff/progres/progres/trained_models/v_0_2_0/trained_model.pt
+mkdir TopoDiff/progres/progres/databases/v_0_2_0/
+wget https://zenodo.org/records/7782089/files/cath40.pt -O TopoDiff/progres/progres/databases/v_0_2_0/cath40.pt
 ```
 
 
