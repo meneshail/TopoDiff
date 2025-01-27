@@ -48,11 +48,7 @@ def compute_coverage(path_list,
         # load CATH embeddings
         if verbose:
             logger.info('Loading precomputed CATH embeddings')
-        cath_emb_path = os.path.join(progres.__path__[0], 'databases', 'v_0_2_0', 'cath40.pt')
-        cath_emb_dict = torch.load(cath_emb_path)
-        cath_ref_length = torch.tensor(cath_emb_dict['nres'] )
-        filter_mask = (cath_ref_length >= length - scope) & (cath_ref_length <= length + scope)
-        cath_emb_filtered = cath_emb_dict['embeddings'][filter_mask].numpy()
+        cath_emb_filtered = filter_cath_embeddings(length, scope)
         # 1 - cosine similarity
         ref_dis_mat = 1 - np.matmul(cath_emb_filtered, cath_emb_filtered.T)
 
@@ -78,10 +74,11 @@ def compute_coverage(path_list,
         # load TM score matrix
         if verbose:
             logger.info('Loading precomputed reference TM score matrix')
-        ref_tm_path = os.path.join(cath_tm_mat_dir, 'length_%d.pkl' % length)
-        with open(ref_tm_path, 'rb') as f:
-            ref_tm_dict = pickle.load(f)
-        ref_dis_mat = 1 - (ref_tm_dict['tm_mat_norm_chain'] + ref_tm_dict['tm_mat_norm_chain'].T) / 2
+        # ref_tm_path = os.path.join(cath_tm_mat_dir, 'length_%d.pkl' % length)
+        # with open(ref_tm_path, 'rb') as f:
+        #     ref_tm_dict = pickle.load(f)
+        # ref_dis_mat = 1 - (ref_tm_dict['tm_mat_norm_chain'] + ref_tm_dict['tm_mat_norm_chain'].T) / 2
+        ref_dis_mat = load_cath_ref_tm_matrix(length, scope)
 
         # compute TM score matrix for the sampled proteins
         if verbose:
@@ -99,6 +96,49 @@ def compute_coverage(path_list,
         coverage = compute_coverage_with_precomputed_dist(ref_dis_mat, ref_sample_dis_mat, K = K)
 
     return coverage
+
+def load_cath_ref_tm_matrix(length, scope):
+    """
+    Load precomputed TM score matrix for CATH reference proteins.
+    Args:
+        length:
+            length of the sampled protein.
+        scope:
+            scope for the coverage calculation. reference proteins within [length-scope, length+scope] will be used.
+    Returns:
+        ref_dis_mat:
+            distance matrix of reference proteins. (N_ref, N_ref)
+    """
+    assert length in range(50, 251, 25) and scope == 25, "TM only supports length in [50, 75, 100, 125, 150, 175, 200, 225, 250] and scope = 25."
+    coverage_data_dir = os.path.join(project_dir, 'data', 'evaluation', 'coverage')
+    cath_tm_mat_dir = os.path.join(coverage_data_dir, 'cath_tm')
+
+    ref_tm_path = os.path.join(cath_tm_mat_dir, 'length_%d.pkl' % length)
+    with open(ref_tm_path, 'rb') as f:
+        ref_tm_dict = pickle.load(f)
+    ref_dis_mat = 1 - (ref_tm_dict['tm_mat_norm_chain'] + ref_tm_dict['tm_mat_norm_chain'].T) / 2
+
+    return ref_dis_mat
+
+def filter_cath_embeddings(length, scope):
+    """
+    Filter CATH embeddings based on length and scope.
+    Args:
+        length:
+            length of the sampled protein.
+        scope:
+            scope for the coverage calculation. reference proteins within [length-scope, length+scope] will be used.
+    Returns:
+        cath_emb_filtered:
+            filtered CATH embeddings. (N, 128)
+    """
+    cath_emb_path = os.path.join(progres.__path__[0], 'databases', 'v_0_2_0', 'cath40.pt')
+    cath_emb_dict = torch.load(cath_emb_path)
+    cath_ref_length = torch.tensor(cath_emb_dict['nres'] )
+    filter_mask = (cath_ref_length >= length - scope) & (cath_ref_length <= length + scope)
+    cath_emb_filtered = cath_emb_dict['embeddings'][filter_mask].numpy()
+
+    return cath_emb_filtered
 
 
 def compute_coverage_with_precomputed_dist(ref_dis_mat,
