@@ -302,7 +302,8 @@ class MyTrainer():
     def run(self):
         if self.rank == 0:
             self._save_checkpoint(save_state = True)
-        dist.barrier()
+        if self.use_ddp:
+            dist.barrier()
 
         self.sampling_iter()
         if self.train_config.Base.embedding_save_per_epoch is not None:
