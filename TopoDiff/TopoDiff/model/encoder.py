@@ -7,6 +7,11 @@ from TopoDiff.utils.encoder_tensor_utils import batched_index_select
 
 from TopoDiff.utils.debug import print_shape, log_var
 
+import torch.nn as nn
+from myopenfold.utils.rigid_utils import Rotation, Rigid
+from myopenfold.model.structure_module import InvariantPointAttention
+from TopoDiff.model.backbone import EdgeTransition
+
 logger = logging.getLogger("TopoDiff.model.encoder")
 
 # From https://github.com/lucidrains/egnn-pytorch
@@ -129,8 +134,14 @@ class Model_0(torch.nn.Module):
         self.feature_dim  = config_encoder.feature_dim
         self.hidden_dim   = config_encoder.hidden_dim
         self.n_layers     = config_encoder.n_layers
+
+        self.layer_type = config_encoder.layer_type
+
         self.hidden_egnn_dim = config_encoder.hidden_egnn_dim
         self.hidden_edge_dim = config_encoder.hidden_edge_dim
+
+        self.ipa_config = config_encoder.ipa
+
         self.dropout      = config_encoder.dropout
         self.dropout_final = config_encoder.dropout_final
         self.embedding_size = config_encoder.embedding_size
@@ -141,15 +152,58 @@ class Model_0(torch.nn.Module):
         self.transformer_config = None if not config_encoder.transformer.enable else config_encoder.transformer
         
         self.node_enc = Linear(self.feature_dim, self.hidden_dim)
-        self.layers = torch.nn.ModuleList()
-        for i in range(self.n_layers):
-            self.layers.append(EGNN(
-                dim=self.hidden_dim,
-                m_dim=self.hidden_egnn_dim,
-                hidden_egnn_dim=self.hidden_egnn_dim,
-                hidden_edge_dim=self.hidden_edge_dim,
-                dropout=self.dropout,
-            ))
+
+        if self.layer_type == 'egnn':  
+            self.layers = torch.nn.ModuleList()
+            for i in range(self.n_layers):
+                self.layers.append(EGNN(
+                    dim=self.hidden_dim,
+                    m_dim=self.hidden_egnn_dim,
+                    hidden_egnn_dim=self.hidden_egnn_dim,
+                    hidden_edge_dim=self.hidden_edge_dim,
+                    dropout=self.dropout,
+                ))
+        elif self.layer_type == 'ipa':
+            logger.info('Using IPA encoder')
+            assert self.ipa_config.c_s == self.hidden_dim
+            self.layer_dict = nn.ModuleDict()
+            # self.edge_enc = Linear(self.hidden_dim * 2 + 1, self.ipa_config.c_z)
+            self.edge_enc = EdgeTransition(
+                node_embed_size=self.hidden_dim,
+                edge_embed_in=1,
+                edge_embed_out=self.ipa_config.c_z,
+                )
+            
+            for i in range(self.n_layers):
+                self.layer_dict[f'ipa_{i}'] = InvariantPointAttention(
+                    c_s = self.ipa_config.c_s,
+                    c_z=self.ipa_config.c_z,
+                    c_hidden=self.ipa_config.c_hidden,
+                    no_heads=self.ipa_config.no_heads,
+                    no_qk_points=self.ipa_config.no_qk_points,
+                    no_v_points=self.ipa_config.no_v_points,
+                    inf=self.ipa_config.inf,
+                    eps=self.ipa_config.eps,
+                )
+                self.layer_dict[f'ipa_ln_{i}'] = nn.LayerNorm(self.hidden_dim)
+
+                self.layer_dict['ffn_%d' % i] = Sequential(
+                    Linear(self.hidden_dim, self.hidden_dim * 2),
+                    Dropout(self.dropout) if self.dropout > 0 else Identity(),
+                    SiLU(),
+                    Linear(self.hidden_dim * 2, self.hidden_dim),
+                    nn.LayerNorm(self.hidden_dim),
+                )
+
+                if i != self.n_layers - 1:
+                    self.layer_dict[f'edge_transition_{i}'] = EdgeTransition(
+                        node_embed_size=self.hidden_dim,
+                        edge_embed_in=self.ipa_config.c_z,
+                        edge_embed_out=self.ipa_config.c_z,
+                        )
+        else:
+            raise ValueError(f'Unknown layer type {self.layer_type}')
+                
         self.node_dec = torch.nn.Sequential(
             Linear(self.hidden_dim, self.hidden_dim),
             Dropout(self.dropout) if self.dropout > 0 else Identity(),
@@ -227,13 +281,28 @@ class Model_0(torch.nn.Module):
             coords = data["encoder_coords"]
             adj_mat = data["encoder_adj_mat"]
             mask = data["encoder_mask"]
+            if self.layer_type == 'ipa':
+                if data['encoder_frame_gt'].shape[-1] == 7:
+                    rigids = Rigid.from_tensor_7(data['encoder_frame_gt']).scale_translation(1. / self.ipa_config.trans_scale_factor)
+                else:
+                    rigids = Rigid.from_tensor_4x4(data['encoder_frame_gt']).scale_translation(1. / self.ipa_config.trans_scale_factor)
         else:
             raise NotImplementedError(f'Unknown input type {type(data)}')
 
         feats = self.node_enc(feats)
 
-        for layer in self.layers:
-            feats, coords = layer(feats, coords, mask, adj_mat)
+        if self.layer_type == 'egnn':
+            for layer in self.layers:
+                feats, coords = layer(feats, coords, mask, adj_mat)
+        elif self.layer_type == 'ipa':
+            edge_feat = self.edge_enc(feats, adj_mat[..., None])
+            for i in range(self.n_layers):
+                ipa_out = self.layer_dict[f'ipa_{i}'](feats, edge_feat, rigids, mask.to(feats.dtype))
+                # feats = feats * mask[..., None]
+                feats = self.layer_dict[f'ipa_ln_{i}'](feats + ipa_out)
+                feats = self.layer_dict[f'ffn_{i}'](feats)
+                if i != self.n_layers - 1:
+                    edge_feat = self.layer_dict[f'edge_transition_{i}'](feats, edge_feat)
 
         if self.tfmr_version is not None:
             if self.tfmr_version == 1:
