@@ -163,6 +163,10 @@ To use the evaluation script, additional precomputed data are required to be dow
 # download also from https://zenodo.org/records/13879812
 mv path/to/download/evaluation/ data/
 
+# init and download progres as submodule
+git submodule init
+git submodule update
+
 # download the model and CATH embeddings following official instructions
 mkdir TopoDiff/progres/progres/trained_models/v_0_2_0/
 wget https://zenodo.org/records/7782089/files/trained_model.pt -O TopoDiff/progres/progres/trained_models/v_0_2_0/trained_model.pt
