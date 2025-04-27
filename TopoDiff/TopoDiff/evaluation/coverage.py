@@ -74,11 +74,8 @@ def compute_coverage(path_list,
         # load TM score matrix
         if verbose:
             logger.info('Loading precomputed reference TM score matrix')
-        # ref_tm_path = os.path.join(cath_tm_mat_dir, 'length_%d.pkl' % length)
-        # with open(ref_tm_path, 'rb') as f:
-        #     ref_tm_dict = pickle.load(f)
-        # ref_dis_mat = 1 - (ref_tm_dict['tm_mat_norm_chain'] + ref_tm_dict['tm_mat_norm_chain'].T) / 2
-        ref_dis_mat = load_cath_ref_tm_matrix(length, scope)
+        ref_tm_dict = load_cath_ref_dct(length, scope)
+        ref_dis_mat = 1 - (ref_tm_dict['tm_mat_norm_chain'] + ref_tm_dict['tm_mat_norm_chain'].T) / 2
 
         # compute TM score matrix for the sampled proteins
         if verbose:
@@ -97,7 +94,7 @@ def compute_coverage(path_list,
 
     return coverage
 
-def load_cath_ref_tm_matrix(length, scope):
+def load_cath_ref_dct(length, scope):
     """
     Load precomputed TM score matrix for CATH reference proteins.
     Args:
@@ -116,9 +113,7 @@ def load_cath_ref_tm_matrix(length, scope):
     ref_tm_path = os.path.join(cath_tm_mat_dir, 'length_%d.pkl' % length)
     with open(ref_tm_path, 'rb') as f:
         ref_tm_dict = pickle.load(f)
-    ref_dis_mat = 1 - (ref_tm_dict['tm_mat_norm_chain'] + ref_tm_dict['tm_mat_norm_chain'].T) / 2
-
-    return ref_dis_mat
+    return ref_tm_dict
 
 def filter_cath_embeddings(length, scope):
     """
@@ -132,7 +127,7 @@ def filter_cath_embeddings(length, scope):
         cath_emb_filtered:
             filtered CATH embeddings. (N, 128)
     """
-    cath_emb_path = os.path.join(progres.__path__[0], 'databases', 'v_0_2_0', 'cath40.pt')
+    cath_emb_path = os.path.join(project_dir, 'TopoDiff', 'progres', 'progres', 'databases', 'v_0_2_0', 'cath40.pt')
     cath_emb_dict = torch.load(cath_emb_path)
     cath_ref_length = torch.tensor(cath_emb_dict['nres'] )
     filter_mask = (cath_ref_length >= length - scope) & (cath_ref_length <= length + scope)

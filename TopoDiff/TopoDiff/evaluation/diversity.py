@@ -107,7 +107,7 @@ def compute_tm_matrix(path_list_1,
         tm_matrix = np.zeros((len(path_list_1), len(path_list_2)))
 
     for res_dict in tqdm(tm_loader):
-        tm_matrix[res_dict['i'], res_dict['j']] =  (res_dict['tm_norm_chain1'] + res_dict['tm_norm_chain1']) / 2
+        tm_matrix[res_dict['i'], res_dict['j']] = (res_dict['tm_norm_chain1'] + res_dict['tm_norm_chain2']) / 2
 
     if ca_coord_dict_2 is None:
         tm_matrix = tm_matrix + tm_matrix.T - np.diag(np.diag(tm_matrix))
