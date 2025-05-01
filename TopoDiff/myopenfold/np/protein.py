@@ -69,7 +69,6 @@ class Protein:
     # NOTE add for self-defined label
     label_override: Optional[str] = None
 
-
 def from_pdb_string(pdb_str: str, chain_id: Optional[str] = None) -> Protein:
     """Takes a PDB string and constructs a Protein object.
 
@@ -300,7 +299,7 @@ def add_pdb_headers(prot: Protein, pdb_str: str) -> str:
     return '\n'.join(out_pdb_lines)
 
 
-def to_pdb(prot: Protein, slice = (None, None)) -> str:
+def to_pdb(prot: Protein) -> str:
     """Converts a `Protein` instance to a PDB string.
 
     Args:
@@ -322,16 +321,6 @@ def to_pdb(prot: Protein, slice = (None, None)) -> str:
     b_factors = prot.b_factors
     chain_index = prot.chain_index
 
-    # NOTE my utils for slice part of the protein
-    start_idx = 0
-    end_idx = aatype.shape[0]
-    if slice[0] is not None:
-        assert slice[0] >= 0 and slice[0] < atom_mask.shape[0]
-        start_idx = slice[0]
-    if slice[1] is not None:
-        assert slice[1] >= start_idx and slice[1] < atom_mask.shape[0]
-        end_idx = slice[1]
-
     if np.any(aatype > residue_constants.restype_num):
         raise ValueError("Invalid aatypes.")
 
@@ -344,10 +333,7 @@ def to_pdb(prot: Protein, slice = (None, None)) -> str:
     prev_chain_index = 0
     chain_tags = string.ascii_uppercase
     # Add all atom sites.
-    chain_tag = "A"  # NOTE added for very special case of not knowing any coords
-    # for i in range(n):
-    for i in range(start_idx, end_idx):
-        # NOTE 24.03.26: The residue name is given by the residue type.
+    for i in range(n):
         res_name_3 = res_1to3(aatype[i])
         for atom_name, pos, mask, b_factor in zip(
             atom_types, atom_positions[i], atom_mask[i], b_factors[i]
@@ -360,7 +346,6 @@ def to_pdb(prot: Protein, slice = (None, None)) -> str:
             alt_loc = ""
             insertion_code = ""
             occupancy = 1.00
-            # NOTE 24.03.26: The atom element is always the first letter of the atom name
             element = atom_name[
                 0
             ]  # Protein supports only C, N, O, S, this works.

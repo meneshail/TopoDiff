@@ -78,7 +78,6 @@ chi_angles_atoms = {
     "VAL": [["N", "CA", "CB", "CG1"]],
 }
 
-#. 1 if chi angle is present, 0 if not.
 # If chi angles given in fixed-length array, this matrix determines how to mask
 # them for each AA type. The order is as per restype_order (see below).
 chi_angles_mask = [
@@ -551,7 +550,6 @@ between_res_bond_length_stddev_c_n = [0.014, 0.016]
 between_res_cos_angles_c_n_ca = [-0.5203, 0.0353]  # degrees: 121.352 +- 2.315
 between_res_cos_angles_ca_c_n = [-0.4473, 0.0311]  # degrees: 116.568 +- 1.995
 
-#. atom-37
 # This mapping is used when we need to store atom data in a format that requires
 # fixed atom data size for every residue (e.g. a numpy array).
 atom_types = [
@@ -596,7 +594,6 @@ atom_types = [
 atom_order = {atom_type: i for i, atom_type in enumerate(atom_types)}
 atom_type_num = len(atom_types)  # := 37.
 
-#. atom-14
 # A compact atom encoding with 14 columns
 # pylint: disable=line-too-long
 # pylint: disable=bad-whitespace

@@ -174,7 +174,6 @@ mkdir TopoDiff/progres/progres/databases/v_0_2_0/
 wget https://zenodo.org/records/7782089/files/cath40.pt -O TopoDiff/progres/progres/databases/v_0_2_0/cath40.pt
 ```
 
-
 ## Reference
 
 [Improving Diffusion-Based Protein Backbone Generation with Global-Geometry-aware Latent Encoding](https://www.biorxiv.org/content/10.1101/2024.10.05.616664)

@@ -1,3 +1,17 @@
+# Copyright 2021 AlQuraishi Laboratory
+# Copyright 2021 DeepMind Technologies Limited
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 from functools import reduce
 import importlib
 import math
@@ -200,28 +214,20 @@ class InvariantPointAttention(nn.Module):
         # supplement. There, they lack bias and use Glorot initialization.
         # Here as in the official source, they have bias and use the default
         # Lecun initialization.
-        #. query 1D linear layer
-        #. no_heads * c_hidden
         hc = self.c_hidden * self.no_heads
         self.linear_q = Linear(self.c_s, hc)
         self.linear_kv = Linear(self.c_s, 2 * hc)
 
-        #. query point linear layer
-        #. 3 * no_heads * no_qk_points
         hpq = self.no_heads * self.no_qk_points * 3
         self.linear_q_points = Linear(self.c_s, hpq)
 
-        #. key/value point linear layer
-        #. 3 * no_heads * (no_qk_points + no_v_points)
         hpkv = self.no_heads * (self.no_qk_points + self.no_v_points) * 3
         self.linear_kv_points = Linear(self.c_s, hpkv)
 
         hpv = self.no_heads * self.no_v_points * 3
 
-        #. edge linear layer
         self.linear_b = Linear(self.c_z, self.no_heads)
 
-        #. learnable head weights
         self.head_weights = nn.Parameter(torch.zeros((no_heads)))
         ipa_point_weights_init_(self.head_weights)
 
@@ -240,6 +246,8 @@ class InvariantPointAttention(nn.Module):
         r: Rigid,
         mask: torch.Tensor,
         inplace_safe: bool = False,
+        _offload_inference: bool = False,
+        _z_reference_list: Optional[Sequence[torch.Tensor]] = None,
     ) -> torch.Tensor:
         """
         Args:
@@ -254,7 +262,10 @@ class InvariantPointAttention(nn.Module):
         Returns:
             [*, N_res, C_s] single representation update
         """
-        z = [z]
+        if(_offload_inference and inplace_safe):
+            z = _z_reference_list
+        else:
+            z = [z]
        
         #######################################
         # Generate scalar and point activations
@@ -290,7 +301,6 @@ class InvariantPointAttention(nn.Module):
         kv_pts = self.linear_kv_points(s)
 
         # [*, N_res, H * (P_q + P_v), 3]
-        #. about 50 times slower on GPU than reshape
         kv_pts = torch.split(kv_pts, kv_pts.shape[-1] // 3, dim=-1)
         kv_pts = torch.stack(kv_pts, dim=-1)
         kv_pts = r[..., None].apply(kv_pts)
@@ -307,10 +317,12 @@ class InvariantPointAttention(nn.Module):
         # Compute attention scores
         ##########################
         # [*, N_res, N_res, H]
-        #. edge bias
         b = self.linear_b(z[0])
         
-        #. scalar attention
+        if(_offload_inference):
+            assert(sys.getrefcount(z[0]) == 2)
+            z[0] = z[0].cpu()
+
         # [*, H, N_res, N_res]
         if(is_fp16_enabled()):
             with torch.cuda.amp.autocast(enabled=False):
@@ -327,7 +339,6 @@ class InvariantPointAttention(nn.Module):
         a *= math.sqrt(1.0 / (3 * self.c_hidden))
         a += (math.sqrt(1.0 / 3) * permute_final_dims(b, (2, 0, 1)))
 
-        #. point attention
         # [*, N_res, N_res, H, P_q, 3]
         pt_att = q_pts.unsqueeze(-4) - k_pts.unsqueeze(-5)
         if(inplace_safe):
@@ -336,11 +347,7 @@ class InvariantPointAttention(nn.Module):
             pt_att = pt_att ** 2
 
         # [*, N_res, N_res, H, P_q]
-        #. sum+unbind seems to be 3 times faster than torch.sum on CPU
-        #. but 3 times slower on GPU
-        #. in my implementation I will use torch.sum
         pt_att = sum(torch.unbind(pt_att, dim=-1))
-        #. head_weights [*, 1, 1, H, 1]
         head_weights = self.softplus(self.head_weights).view(
             *((1,) * len(pt_att.shape[:-2]) + (-1, 1))
         )
@@ -361,7 +368,7 @@ class InvariantPointAttention(nn.Module):
         # [*, H, N_res, N_res]
         pt_att = permute_final_dims(pt_att, (2, 0, 1))
         
-        if(inplace_safe and use_attn_core):
+        if(inplace_safe):
             a += pt_att
             del pt_att
             a += square_mask.unsqueeze(-3)
@@ -376,25 +383,19 @@ class InvariantPointAttention(nn.Module):
             a = a + square_mask.unsqueeze(-3)
             a = self.softmax(a)
 
-        #. a [*, H, N_res, N_res]
-
         ################
         # Compute output
         ################
-        #. a [*, H, N_res, N_res]
-        #. v [*, N_res, H, C_hidden] -> [*, H, N_res, C_hidden]
-        #. o [*, H, N_res, N_res] * [*, H, N_res, C_hidden] -> [*, H, N_res, C_hidden] -> [*, N_res, H, C_hidden]
         # [*, N_res, H, C_hidden]
         o = torch.matmul(
             a, v.transpose(-2, -3).to(dtype=a.dtype)
         ).transpose(-2, -3)
 
         # [*, N_res, H * C_hidden]
-        o = o.reshape(o.shape[:-2] + (-1,))
+        o = flatten_final_dims(o, 2)
 
         # [*, H, 3, N_res, P_v] 
         if(inplace_safe):
-            #. v_pts [*, N_res, H, P_v, 3] -> [*, H, 3, N_res, P_v]
             v_pts = permute_final_dims(v_pts, (1, 3, 0, 2))
             o_pt = [
                 torch.matmul(a, v.to(a.dtype)) 
@@ -402,9 +403,6 @@ class InvariantPointAttention(nn.Module):
             ]
             o_pt = torch.stack(o_pt, dim=-3)
         else:
-            #. a [*, H, N_res, N_res] -> [*, H, 1, N_res, N_res, 1]
-            #. v_pts [*, N_res, H, P_v, 3] -> [*, H, 3, N_res, P_v] -> [*, H, 3, 1, N_res, P_v]
-            #. o_pt [*, H, 3, N_res, P_v]
             o_pt = torch.sum(
                 (
                     a[..., None, :, :, None]
@@ -425,9 +423,9 @@ class InvariantPointAttention(nn.Module):
         # [*, N_res, H * P_v, 3]
         o_pt = o_pt.reshape(*o_pt.shape[:-3], -1, 3)
 
-        #. a [*, H, N_res, N_res] -> [*, N_res, H, N_res]
-        #. z [*, N_res, N_res, C_z]
-        #. o_pair [*, N_res, H, C_z]
+        if(_offload_inference):
+            z[0] = z[0].to(o_pt.device)
+
         # [*, N_res, H, C_z]
         o_pair = torch.matmul(a.transpose(-2, -3), z[0].to(dtype=a.dtype))
 
@@ -543,8 +541,6 @@ class StructureModule(nn.Module):
         trans_scale_factor,
         epsilon,
         inf,
-        depth=0,
-        log=False,
         **kwargs,
     ):
         """
@@ -583,9 +579,6 @@ class StructureModule(nn.Module):
         """
         super(StructureModule, self).__init__()
 
-        self.depth = depth
-        self.log = log
-
         self.c_s = c_s
         self.c_z = c_z
         self.c_ipa = c_ipa
@@ -613,7 +606,6 @@ class StructureModule(nn.Module):
 
         self.linear_in = Linear(self.c_s, self.c_s)
 
-        #. IPA
         self.ipa = InvariantPointAttention(
             self.c_s,
             self.c_z,
@@ -628,17 +620,14 @@ class StructureModule(nn.Module):
         self.ipa_dropout = nn.Dropout(self.dropout_rate)
         self.layer_norm_ipa = LayerNorm(self.c_s)
 
-        #. Transition
         self.transition = StructureModuleTransition(
             self.c_s,
             self.no_transition_layers,
             self.dropout_rate,
         )
 
-        #. Backbone Update
         self.bb_update = BackboneUpdate(self.c_s)
 
-        #. Angle Resnet
         self.angle_resnet = AngleResnet(
             self.c_s,
             self.c_resnet,
@@ -653,6 +642,7 @@ class StructureModule(nn.Module):
         aatype,
         mask=None,
         inplace_safe=False,
+        _offload_inference=False,
     ):
         """
         Args:
@@ -669,35 +659,29 @@ class StructureModule(nn.Module):
         Returns:
             A dictionary of outputs
         """
-        if self.log: print('\t' * self.depth + 'In StructureModule: init')  # DEBUG
-        if self.log: print('\t' * self.depth + 's: ', evoformer_output_dict["single"].shape)  # DEBUG
-        if self.log: print('\t' * self.depth + 'z: ', evoformer_output_dict["pair"].shape)  # DEBUG
-
-        #. s [*, N_res, C_s]
         s = evoformer_output_dict["single"]
         
-        #. mask [*, N_res]
         if mask is None:
             # [*, N]
             mask = s.new_ones(s.shape[:-1])
 
-        #. s [*, N_res, C_s]
         # [*, N, C_s]
         s = self.layer_norm_s(s)
 
-        #. z [*, N_res, N_res, C_z]
         # [*, N, N, C_z]
         z = self.layer_norm_z(evoformer_output_dict["pair"])
 
-        #. reference manipulation
         z_reference_list = None
+        if(_offload_inference):
+            assert(sys.getrefcount(evoformer_output_dict["pair"]) == 2)
+            evoformer_output_dict["pair"] = evoformer_output_dict["pair"].cpu()
+            z_reference_list = [z]
+            z = None
 
-        #. s [*, N_res, C_s],  s_initial is kept for later use
         # [*, N, C_s]
         s_initial = s
         s = self.linear_in(s)
 
-        #. initialize the rigid body transformations
         # [*, N]
         rigids = Rigid.identity(
             s.shape[:-1], 
@@ -708,7 +692,6 @@ class StructureModule(nn.Module):
         )
         outputs = []
         for i in range(self.no_blocks):
-            #. IPA
             # [*, N, C_s]
             s = s + self.ipa(
                 s, 
@@ -716,28 +699,16 @@ class StructureModule(nn.Module):
                 rigids, 
                 mask, 
                 inplace_safe=inplace_safe,
+                _offload_inference=_offload_inference, 
+                _z_reference_list=z_reference_list
             )
             s = self.ipa_dropout(s)
-            if self.log and i == 0: print('\t' * self.depth + 'In StructureModule: after IPA')  # DEBUG
-            if self.log and i == 0: print('\t' * self.depth + 's: ', s.shape)  # DEBUG
-
-            #. Transition
-            #. s [*, N, C_s]
             s = self.layer_norm_ipa(s)
             s = self.transition(s)
-            if self.log and i == 0: print('\t' * self.depth + 'In StructureModule: after Transition')  # DEBUG
-            if self.log and i == 0: print('\t' * self.depth + 's: ', s.shape)  # DEBUG
-
-            #. Backbone Update
+           
             # [*, N]
-            # print('%d: s' % i, s)
-            # print('%d: self.bb_update(s)' % i, self.bb_update(s))
             rigids = rigids.compose_q_update_vec(self.bb_update(s))
-            if self.log and i == 0: print('\t' * self.depth + 'In StructureModule: after Backbone Update')  # DEBUG
-            if self.log and i == 0: print('\t' * self.depth + 'rigids: ', rigids.shape)  # DEBUG
 
-            #. these lines simply create a Rigid object with rotation-matrix representation
-            #.  and scale the translation part
             # To hew as closely as possible to AlphaFold, we convert our
             # quaternion-based transformations to rotation-matrix ones
             # here
@@ -753,35 +724,22 @@ class StructureModule(nn.Module):
                 self.trans_scale_factor
             )
 
-            #. Angle Resnet
             # [*, N, 7, 2]
             unnormalized_angles, angles = self.angle_resnet(s, s_initial)
-            if self.log and i == 0: print('\t' * self.depth + 'In StructureModule: after Angle Resnet')  # DEBUG
-            if self.log and i == 0: print('\t' * self.depth + 'unnormalized_angles: ', unnormalized_angles.shape)  # DEBUG
 
-            #. Sidechain frame update
-            # NOTE need to understand the computation further
             all_frames_to_global = self.torsion_angles_to_frames(
                 backb_to_global,
                 angles,
                 aatype,
             )
-            if self.log and i == 0: print('\t' * self.depth + 'In StructureModule: after Sidechain Frame Update')  # DEBUG
-            if self.log and i == 0: print('\t' * self.depth + 'all_frames_to_global: ', type(all_frames_to_global), all_frames_to_global.shape)  # DEBUG
 
-            #. get position of all atoms in the global frame
-            # NOTE need to understand the computation further
             pred_xyz = self.frames_and_literature_positions_to_atom14_pos(
                 all_frames_to_global,
                 aatype,
             )
-            if self.log and i == 0: print('\t' * self.depth + 'In StructureModule: after Frame to Pos')  # DEBUG
-            if self.log and i == 0: print('\t' * self.depth + 'pred_xyz: ', type(pred_xyz), pred_xyz.shape)  # DEBUG
 
-            #. scale the translation part
             scaled_rigids = rigids.scale_translation(self.trans_scale_factor)
             
-            #. save the result
             preds = {
                 "frames": scaled_rigids.to_tensor_7(),
                 "sidechain_frames": all_frames_to_global.to_tensor_4x4(),
@@ -796,8 +754,12 @@ class StructureModule(nn.Module):
             rigids = rigids.stop_rot_gradient()
 
         del z, z_reference_list
+        
+        if(_offload_inference):
+            evoformer_output_dict["pair"] = (
+                evoformer_output_dict["pair"].to(s.device)
+            )
 
-        #. stack prediction of each iter
         outputs = dict_multimap(torch.stack, outputs)
         outputs["single"] = s
 
@@ -867,4 +829,3 @@ class StructureModule(nn.Module):
             self.atom_mask,
             self.lit_positions,
         )
-

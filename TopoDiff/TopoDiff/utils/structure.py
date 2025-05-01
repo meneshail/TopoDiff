@@ -200,7 +200,7 @@ def reconstruct_backbone_position_without_torsion(restype_backbone_rigid_group_d
             The sequence type of each residues.
 
     """
-    float_type = frame_pred.dtype
+    float_type = frame_pred._trans.dtype
     device = frame_pred.device
     batch_shape = frame_pred.shape
     if seq_type is None:

@@ -17,12 +17,7 @@ import torch
 
 def is_fp16_enabled():
     # Autocast world
-    # print("In is_fp16_enabled, torch.get_autocast_gpu_dtype()", torch.get_autocast_gpu_dtype())  # DEBUG
-    # print("In is_fp16_enabled, torch.is_autocast_enabled()", torch.is_autocast_enabled())  # DEBUG
-
-    fp16_enabled = torch.get_autocast_gpu_dtype() == torch.float16 or str(torch.get_autocast_gpu_dtype()) == 'torch.half'
+    fp16_enabled = torch.get_autocast_gpu_dtype() == torch.float16
     fp16_enabled = fp16_enabled and torch.is_autocast_enabled()
-
-    # print("In is_fp16_enabled, fp16_enabled", fp16_enabled)  # DEBUG
 
     return fp16_enabled

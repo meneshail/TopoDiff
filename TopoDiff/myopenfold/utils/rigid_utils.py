@@ -1,3 +1,18 @@
+# Copyright 2021 AlQuraishi Laboratory
+# Copyright 2021 DeepMind Technologies Limited
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 from functools import lru_cache
 from typing import Tuple, Any, Sequence, Callable, Optional
@@ -5,10 +20,7 @@ from typing import Tuple, Any, Sequence, Callable, Optional
 import numpy as np
 import torch
 
-import pickle
 
-
-#. Rotation matrix multiplication
 def rot_matmul(
     a: torch.Tensor, 
     b: torch.Tensor
@@ -49,7 +61,6 @@ def rot_matmul(
     )
 
 
-#. Apply rotation to vectors, looks like in a row-wise fashion
 def rot_vec_mul(
     r: torch.Tensor, 
     t: torch.Tensor
@@ -142,7 +153,6 @@ def _to_mat(pairs):
     return mat
 
 
-# NOTE what is this?
 _QTR_MAT = np.zeros((4, 4, 3, 3))
 _QTR_MAT[..., 0, 0] = _to_mat([("aa", 1), ("bb", 1), ("cc", -1), ("dd", -1)])
 _QTR_MAT[..., 0, 1] = _to_mat([("bc", 2), ("ad", -2)])
@@ -155,7 +165,6 @@ _QTR_MAT[..., 2, 1] = _to_mat([("cd", 2), ("ab", 2)])
 _QTR_MAT[..., 2, 2] = _to_mat([("aa", 1), ("bb", -1), ("cc", -1), ("dd", 1)])
 
 
-#. Quaternian to rotation matrix
 def quat_to_rot(quat: torch.Tensor) -> torch.Tensor:
     """
         Converts a quaternion to a rotation matrix.
@@ -179,40 +188,28 @@ def quat_to_rot(quat: torch.Tensor) -> torch.Tensor:
     return torch.sum(quat, dim=(-3, -4))
 
 
-#. Rotation matrix to quaternion
 def rot_to_quat(
     rot: torch.Tensor,
 ):
-    rot_ori = rot.clone()
-    try:
-        if(rot.shape[-2:] != (3, 3)):
-            raise ValueError("Input rotation is incorrectly shaped")
+    if(rot.shape[-2:] != (3, 3)):
+        raise ValueError("Input rotation is incorrectly shaped")
 
-        rot = [[rot[..., i, j] for j in range(3)] for i in range(3)]
-        [[xx, xy, xz], [yx, yy, yz], [zx, zy, zz]] = rot 
+    rot = [[rot[..., i, j] for j in range(3)] for i in range(3)]
+    [[xx, xy, xz], [yx, yy, yz], [zx, zy, zz]] = rot 
 
-        k = [
-            [ xx + yy + zz,      zy - yz,      xz - zx,      yx - xy,],
-            [      zy - yz, xx - yy - zz,      xy + yx,      xz + zx,],
-            [      xz - zx,      xy + yx, yy - xx - zz,      yz + zy,],
-            [      yx - xy,      xz + zx,      yz + zy, zz - xx - yy,]
-        ]
+    k = [
+        [ xx + yy + zz,      zy - yz,      xz - zx,      yx - xy,],
+        [      zy - yz, xx - yy - zz,      xy + yx,      xz + zx,],
+        [      xz - zx,      xy + yx, yy - xx - zz,      yz + zy,],
+        [      yx - xy,      xz + zx,      yz + zy, zz - xx - yy,]
+    ]
 
-        k = (1./3.) * torch.stack([torch.stack(t, dim=-1) for t in k], dim=-2)
+    k = (1./3.) * torch.stack([torch.stack(t, dim=-1) for t in k], dim=-2)
 
-        _, vectors = torch.linalg.eigh(k)
-        return vectors[..., -1]
-    except Exception as e:
-        print('Error in computation: R', rot_ori, rot_ori.shape)
-        with open('/home/zhangyuy/workspace/dl/diffusion/test/rot_to_quat/rot_error_2404.pkl', 'wb') as f:
-            error_dict = {}
-            error_dict['rot'] = rot_ori
-            error_dict['error_msg'] = str(e)
-            print(e)
-            pickle.dump(error_dict, f)
+    _, vectors = torch.linalg.eigh(k)
+    return vectors[..., -1]
 
 
-# NOTE what is this for?
 _QUAT_MULTIPLY = np.zeros((4, 4, 4))
 _QUAT_MULTIPLY[:, :, 0] = [[ 1, 0, 0, 0],
                           [ 0,-1, 0, 0],
@@ -370,7 +367,6 @@ class Rotation:
             raise ValueError(f"Invalid format: f{fmt}")
 
     # Magic methods
-    #. added by meneshail
     def __repr__(self) -> str:
         return f"Rotation(shape={self.shape}, rot={self.get_cur_rot()})"
 
@@ -554,7 +550,6 @@ class Rotation:
 
     # Rotation functions
 
-    # NOTE(2023.05.18): add the `update_mask` argument from SE3 diffusion
     def compose_q_update_vec(self, 
         q_update_vec: torch.Tensor, 
         normalize_quats: bool = True,
@@ -623,7 +618,6 @@ class Rotation:
             rot_mats=None, quats=new_quats, normalize_quats=normalize_quats
         )
 
-    # NOTE is this in a exactly one-to-one fasion, or is this broadcastable?
     def apply(self, pts: torch.Tensor) -> torch.Tensor:
         """
             Apply the current Rotation as a rotation matrix to a set of 3D
@@ -725,7 +719,6 @@ class Rotation:
 
         return Rotation(rot_mats=rot_mats, quats=None) 
 
-    #. add by mene
     @ staticmethod
     def stack(rs: Sequence[Rigid]):
         rot_mats = torch.cat([r.get_rot_mats().unsqueeze(0) for r in rs], dim=0)
@@ -908,10 +901,6 @@ class Rigid:
             identity_trans(shape, dtype, device, requires_grad),
         )
 
-    #. added by meneshail
-    def __repr__(self) -> str:
-        return f"Rigid(shape={self.shape},\n rot={self.get_rots().get_cur_rot()},\n trans={self.get_trans()})"
-
     def __getitem__(self, 
         index: Any,
     ) -> Rigid:
@@ -1000,14 +989,6 @@ class Rigid:
                 The device on which the Rigid's tensors are located
         """
         return self._trans.device
-    
-    @property
-    def dtype(self) -> torch.dtype:
-        """
-            Returns the dtype of the Rigid's tensors.
-        """
-        return self._trans.dtype
-        
 
     def get_rots(self) -> Rotation:
         """
@@ -1027,7 +1008,6 @@ class Rigid:
         """
         return self._trans
 
-    # NOTE(2023.05.18): add the `update_mask` argument from SE3 diffusion
     def compose_q_update_vec(self, 
         q_update_vec: torch.Tensor,
         update_mask: torch.Tensor=None,
@@ -1180,7 +1160,6 @@ class Rigid:
         return tensor
 
 
-    #. mene
     def to_tensor_RT(self):
         """convert to 3x3 rotation matrix and 3 translation matrix
 
@@ -1194,7 +1173,6 @@ class Rigid:
         return rot, trans
 
 
-    #. mene
     @staticmethod
     def from_tensor_RT(rot, trans):
         """construct Rigid object from 3x3 rotation matrix and 3 translation matrix
@@ -1316,7 +1294,6 @@ class Rigid:
 
         return Rigid(rots, trans)
     
-    #. add by mene
     @ staticmethod
     def stack(ts: Sequence[Rigid]):
         rots = Rotation.cat([t._rots.unsqueeze(0) for t in ts], 0)
@@ -1324,7 +1301,6 @@ class Rigid:
 
         return Rigid(rots, trans)
 
-    #. add by mene
     def __len__(self) -> int:
         """
             Returns the length of the shared dimensions of the rotation and
@@ -1462,6 +1438,6 @@ class Rigid:
         """
         return Rigid(self._rots.cuda(), self._trans.cuda())
     
-    
+
     def cpu(self):
         return Rigid(self._rots.cpu(), self._trans.cpu())
