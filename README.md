@@ -67,6 +67,7 @@ python: run_sampling.py [-h] [-o OUTDIR] [-v VERSION] [-m MODE] [-s START] [-e E
 # python run_sampling.py -o sampling_result -s 100 -e 120 -n 10 -i 10
 ```
 
+
 Arguments:
 
     -h, --help            show this help message and exit
@@ -152,6 +153,8 @@ python ./TopoDiff/run_sampling.py -s 125 -e 125 -n 25 -v custom --ckpt ./experim
 
 ### Evaluation
 
+#### Diversity & Coverage
+
 We currently provide the evaluation scripts for the diversity and the newly proposed coverage metrics. They are located in the `TopoDiff/evaluation` directory.
 
 We recommend first walk through the notebook `3_metrics.ipynb` to understand the usage of the evaluation script.
@@ -173,6 +176,44 @@ wget https://zenodo.org/records/7782089/files/trained_model.pt -O TopoDiff/progr
 mkdir TopoDiff/progres/progres/databases/v_0_2_0/
 wget https://zenodo.org/records/7782089/files/cath40.pt -O TopoDiff/progres/progres/databases/v_0_2_0/cath40.pt
 ```
+#### Designability
+
+We provide the scripts for the designability evaluation in the 'topodiff_eval/sc/' directory. Due to the different dependencies, we recommend installing the package in a new environment.
+
+- installation:
+```bash
+# inside <repo>
+# create a new environment
+mamba env create -n topodiff_eval -f se3.yml
+mamba activate topodiff_eval
+
+# install the package
+cd topodiff_eval
+pip install -e .
+```
+
+- run the script:
+```bash
+python topodiff_eval/sc/run_sc.py \
+    --gpu_list GPU_LIST \
+    --sample_root SAMPLE_ROOT \
+    --sc_test_root SC_TEST_ROOT \
+    --length_list LENGTH_LIST \
+    --n_sample N_SAMPLE \
+    --seq_per_sample SEQ_PER_SAMPLE \
+    --run_phase_1 \
+    --run_phase_2
+```
+
+The script is adapted from [FrameDiff](https://github.com/jasonkyuyim/se3_diffusion). A notable modification is the computation of RMSD. We utilize the more commonly used formula:
+
+$$RMSD_{standard} = \sqrt{\frac{1}{N} \sum_{i=1}^{N} \| \vec{x}_i - \vec{y}_i \|_2^2}$$
+
+while the original implementation uses:
+
+$$RMSD_{FrameDiff} = \frac{1}{N} \sum_{i=1}^{N} \| \vec{x}_i - \vec{y}_i \|_2$$
+
+You can find related discussion in [this issue](https://github.com/jasonkyuyim/se3_diffusion/issues/40#issuecomment-2440086371).
 
 ## Reference
 
