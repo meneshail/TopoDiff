@@ -46,7 +46,7 @@ def parse_args():
 
     return parser.parse_args()
 
-if __name__ == '__main__':
+def main():
 
     cur_path = os.path.dirname(os.path.realpath(__file__))
 
@@ -125,3 +125,6 @@ if __name__ == '__main__':
         trainer = MyLatentTrainer(args, rank, world_size)
         trainer.run()
 
+
+if __name__ == '__main__':
+    main()

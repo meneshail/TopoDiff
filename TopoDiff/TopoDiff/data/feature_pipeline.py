@@ -58,9 +58,37 @@ def transform_fns(common_cfg,
 
     return transforms
 
+def preprocess_transform_fns(common_cfg):
+    """Returns a list of transforms for preprocessing features."""
+    crop_feats = dict(common_cfg.feat)
+    rename_dict = common_cfg.feat_rename
+    dtype_dict = common_cfg.feat_type
+
+    transforms = [
+        data_transforms.cast_to_64bit_ints,
+        data_transforms.squeeze_features,
+        data_transforms.make_seq_mask,
+        data_transforms.make_atom14_masks,
+        data_transforms.make_atom14_positions,
+        data_transforms.atom37_to_frames,
+        data_transforms.atom37_to_torsion_angles(prefix=""),
+        data_transforms.get_backbone_frames,
+        data_transforms.make_contact(common_cfg.contact),
+
+        # sequence feat
+        data_transforms.update_seq_idx(),
+
+        # structure relevant transforms
+        data_transforms.get_coord(common_cfg.coord),
+
+        data_transforms.select_feat(list(crop_feats), rename_dict, dtype_dict)
+    ]
+
+    return transforms
+
 def np_to_tensor_dict(feat):
     for key in feat:
-        if isinstance(feat[key], np.ndarray):
+        if isinstance(feat[key], np.ndarray) and not np.issubdtype(feat[key].dtype, np.object_):
             feat[key] = torch.tensor(feat[key])
 
     return feat
@@ -72,10 +100,23 @@ class PreprocessedFeaturePipeline:
         self.config = config
 
     def process_preprocessed_features(self, feat, extra_config = None):
+        # extra_config = {} if extra_config is None else extra_config
+
         # convert np arrays to tensors
         feat = np_to_tensor_dict(feat)
 
         transforms = transform_fns(self.config.common, self.config.train, extra_config)
+        for transform in transforms:
+            feat = transform(feat)
+
+        return feat
+
+    def preprocess_features(self, feat, extra_config = None):
+        """Preprocesses the features for training or evaluation."""
+        feat = np_to_tensor_dict(feat)
+
+        # convert to tensors
+        transforms = preprocess_transform_fns(self.config.common)
         for transform in transforms:
             feat = transform(feat)
 

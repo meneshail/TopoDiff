@@ -1,6 +1,13 @@
 # TopoDiff
 
-## Introduction
+## 📝 Log & TODO
+
+-   **2025-08-04**
+    -   [x] Updated data preprocessing scripts. ⚙️
+-   **August 2025 (Scheduled)**
+    -   [ ] 「*Gone with the Flow*」: Update flow-based code for training and sampling. 🌊
+
+## 🌟 Introduction
 
 This is the official code repository of the paper "TopoDiff: Improving Diffusion-Based Protein Backbone Generation with Global-Geometry-aware Latent Encoding".
 
@@ -11,7 +18,7 @@ Building on the success of diffusion-based protein backbone generation, we propo
 <img src="media/media.png" width="1000" style="display: block; margin-left: auto; margin-right: auto;">
 
  
-## Installation
+## 📦 Installation
 
 
 We recommend using conda/mamba to install the dependencies. We also recommend installing OpenFold to allow the use of a memory-efficient kernel for attention computation, although this is optional and should not affect the results.
@@ -51,7 +58,7 @@ repo
 ├── TopoDiff
 ```
 
-## Usage
+## 🚀 Usage
 
 ### Sampling script
 
@@ -151,6 +158,16 @@ python ./TopoDiff/run_training.py -o ./experiments --model latent --latent_epoch
 python ./TopoDiff/run_sampling.py -s 125 -e 125 -n 25 -v custom --ckpt ./experiments/ckpt/epoch_<epc>.ckpt -o ./experiments/sample/
 ```
 
+#### Data Preprocessing (Optional)
+
+If you want to process your own PDB dataset, you can use the provided preprocessing script. This script will automatically scan for all `.pdb` files in the input directory, process them in parallel into feature files, and save them in the output directory.
+
+```bash
+# Example: Process PDB files in data/raw_pdbs/ using 32 workers
+# The output will be saved in data/processed_data/, along with a metadata file info.json
+topodiff-preprocess --input_dir ./data/raw_pdbs/ --output_dir ./data/processed_data/ --n_worker 32
+```
+
 ### Evaluation
 
 #### Diversity & Coverage
@@ -215,11 +232,11 @@ $$RMSD_{FrameDiff} = \frac{1}{N} \sum_{i=1}^{N} \| \vec{x}_i - \vec{y}_i \|_2$$
 
 You can find related discussion in [this issue](https://github.com/jasonkyuyim/se3_diffusion/issues/40#issuecomment-2440086371).
 
-## Reference
+## 📚 Reference
 
-[Improving Diffusion-Based Protein Backbone Generation with Global-Geometry-aware Latent Encoding](https://www.biorxiv.org/content/10.1101/2024.10.05.616664)
+[Improving Diffusion-Based Protein Backbone Generation with Global-Geometry-aware Latent Encoding](https://www.nature.com/articles/s42256-025-01059-x)
 
-## Acknowledgements
+## ❤️ Acknowledgements
 
 We adapted some codes from [OpenFold](https://github.com/aqlaboratory/openfold), [FrameDiff](https://github.com/jasonkyuyim/se3_diffusion), [diffae](https://github.com/phizaz/diffae) and [progres](https://github.com/jgreener64/progres). We thank the authors for their impressive work.
 

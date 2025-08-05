@@ -273,6 +273,22 @@ def model_config(
             c.Data.common.encoder_feat.enabled = True
             c.Data.common.encoder_feat.layer_type = 'ipa'
 
+        if 'preprocess_structure' in extra:
+            c.Data.common.structure_preprocessed = False
+
+            c.Data.common.contact.contact_type = 'pseudo_beta'
+            c.Data.common.coord.coord_type = None
+
+            c.Data.common.feat.coord_gt = [NUM_RES, None, None]
+            c.Data.common.feat.coord_gt_mask = [NUM_RES, None]
+            c.Data.common.feat.torsion_gt = [NUM_RES, None, None]
+            c.Data.common.feat.torsion_gt_mask = [NUM_RES, None]
+
+            c.Data.common.feat_rename.all_atom_positions = 'coord_gt'
+            c.Data.common.feat_rename.all_atom_mask = 'coord_gt_mask'
+            c.Data.common.feat_rename.torsion_angles_sin_cos = 'torsion_gt'
+            c.Data.common.feat_rename.torsion_angles_mask = 'torsion_gt_mask'
+
     if low_prec:
         logger.info('Using low precision training, setting eps to 1e-4')
         c.Global.eps = 1e-4
@@ -344,9 +360,6 @@ config = mlc.ConfigDict(
 
                     'coord_gt': 'torch.float32',
                     'coord_gt_mask': 'torch.bool',
-
-                    'contact_gt': 'torch.float32',
-                    'contact_gt_mask': 'torch.bool',
 
                     'timestep': 'torch.long',
                 },
